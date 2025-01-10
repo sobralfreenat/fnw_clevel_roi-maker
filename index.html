@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROI Generator</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 5px;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.container {
+  display: flex;
+  gap: 20px;
+}
+.formulario {
+  max-width: 360px;
+  min-width: 200px;
+  flex: 1;
+}
+.grafico-container {
+  flex: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+input, select {
+  margin: 10px 0;
+  padding: 10px;
+  width: 100%;
+}
+button {
+  padding: 10px;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+button:hover {
+  background-color: #0056b3;
+}
+.resultado, .explicacao {
+  margin-top: 20px;
+  padding: 10px;
+  border: 0px solid #007BFF;
+  border-radius: 5px;
+  width: 75;
+}
+h3 {
+  margin-bottom: 10px;
+}
+#grafico {
+  height: 400px;
+  width: 100%;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="formulario">
+  <h3>C-Level ROI Maker </h3>
+  <label for="nome_projeto">Nome do Projeto:</label>
+  <input type="text" id="nome_projeto" placeholder="Ex: Meu Projeto" oninput="calcularROI()" />
+
+  <label for="objetivo">Objetivo Declarado (R$) (ROI):</label>
+  <input type="number" id="objetivo" placeholder="Ex: 1000" oninput="calcularROI()" />
+  
+  <label for="tempo">Tempo Estimado (Meses) (ROI):</label>
+  <input type="number" id="tempo" placeholder="Ex: 2" oninput="calcularROI()" />
+
+  <label for="momento">Momento do Negócio:</label>
+  <select id="momento" onchange="atualizarFee(); calcularROI();">
+      <option value="construcao">Construção</option>
+      <option value="consolidacao">Consolidação</option>
+      <option value="crescimento">Crescimento</option>
+  </select>
+
+  <label for="percent">Participação nos Resultados (%) (ROI):</label>
+  <input type="number" id="percent" placeholder="Ex: 10" oninput="calcularROI()" />
+
+  <label for="assinantes_cnpj">Quantidade de Assinantes CNPJ por Mês (ROI):</label>
+  <input type="number" id="assinantes_cnpj" placeholder="Ex: 2" oninput="calcularROI()" />
+
+  <label for="meta_cpf_por_cnpj">Meta de Clientes CPF por CNPJ (Mensal) (ROI):</label>
+  <input type="number" id="meta_cpf_por_cnpj" placeholder="Ex: 16" oninput="calcularROI()" />
+  
+  <label for="ticket_cpf">Ticket Médio CPF (R$) (ROI):</label>
+  <input type="number" id="ticket_cpf" placeholder="Ex: 200" oninput="calcularROI()" />
+
+  <label for="ticket_cnpj">Ticket Médio CNPJ (R$) (ROI):</label>
+  <input type="number" id="ticket_cnpj" placeholder="Ex: 4500" oninput="calcularROI()" />
+
+  <label for="custo_cpf">Custo por CPF (R$) (ROI):</label>
+  <input type="number" id="custo_cpf" placeholder="Ex: 23" oninput="calcularROI()" />
+
+  <label for="custo_cnpj">Custo por CNPJ (R$) (ROI):</label>
+  <input type="number" id="custo_cnpj" placeholder="Ex: 1000" oninput="calcularROI()" />
+
+  <button onclick="calcularROI()">Calcular ROI</button>
+  <button onclick="salvarCenario()">Salvar Cenário</button>
+  <button onclick="carregarCenario()">Carregar Cenário</button>
+</div>
+
+<div class="grafico-container">
+  <div id="grafico"></div>
+  <div class="resultado" id="resultado"></div>
+  <div class="explicacao" id="explicacao"></div>
+</div>
+</div>
+
+<input type="file" id="fileInput" style="display: none;" accept=".json" onchange="lerArquivo(event)" />
+
+<script>
+let feeFixo = 6600; // Fee padrão para construção
+const taxaCrescimentoFee = 0.06505; // Taxa de crescimento mensal da fee
+
+function atualizarFee() {
+  const momento = document.getElementById('momento').value;
+  if (momento === 'construcao') {
+      feeFixo = 6600; // Fee fixo na construção
+  } else if (momento === 'crescimento') {
+      feeFixo = 16000; // Fee para crescimento
+  } else if (momento === 'consolidacao') {
+      feeFixo = 10000; // Fee para consolidação
+  }
+}
+
+function calcularROI() {
+  const objetivo = parseFloat(document.getElementById('objetivo').value);
+  const tempo = parseFloat(document.getElementById('tempo').value);
+  const percent = parseFloat(document.getElementById('percent').value) / 100;
+  const assinantesCNPJ = parseFloat(document.getElementById('assinantes_cnpj').value);
+  const metaCpfPorCnpj = parseFloat(document.getElementById('meta_cpf_por_cnpj').value);
+  const ticketCpf = parseFloat(document.getElementById('ticket_cpf').value);
+  const ticketCnpj = parseFloat(document.getElementById('ticket_cnpj').value);
+  const custoCpf = parseFloat(document.getElementById('custo_cpf').value);
+  const custoCnpj = parseFloat(document.getElementById('custo_cnpj').value);
+
+  // Cálculo do faturamento mensal
+  const faturamentoMensal = (assinantesCNPJ * ticketCnpj) + (metaCpfPorCnpj * ticketCpf);
+  const totalFaturamentoAnual = faturamentoMensal * tempo; // Total baseado no tempo estimado
+
+  // Custo Total
+  let custoTotal = (custoCpf * metaCpfPorCnpj * tempo) + (custoCnpj * assinantesCNPJ * tempo);
+
+  // Gerar dados para o gráfico de progressão
+  const labels = [];
+  const faturamentoMensalArray = [];
+  const feeMensal = [];
+  const porcentagemResultados = [];
+  const custoCpfArray = [];
+  const custoCnpjArray = [];
+  const lucroBrutoArray = [];
+  const lucroLiquidoArray = []; // Array para o Lucro Líquido
+  const objetivoArray = []; // Array para o objetivo declarado
+
+  for (let mes = 1; mes <= tempo; mes++) {
+      const faturamento = faturamentoMensal * mes; 
+      const totalFee = feeFixo * Math.pow(1 + taxaCrescimentoFee, mes - 1); // Fee cresce mensalmente
+      const porcentagem = (percent * faturamento) || 0; // Evitar NaN
+      const custoMensalCpf = custoCpf * metaCpfPorCnpj; // Custo mensal para CPF
+      const custoMensalCnpj = custoCnpj * assinantesCNPJ; // Custo mensal para CNPJ
+      
+      // Cálculo do Lucro Bruto
+      const lucroBruto = faturamento - (custoMensalCpf + custoMensalCnpj + totalFee); // Lucro Bruto mensal
+      const lucroLiquido = lucroBruto - (percent * faturamento); // Lucro Líquido mensal
+
+      labels.push(`Mês ${mes}`);
+      faturamentoMensalArray.push(faturamento);
+      feeMensal.push(totalFee);
+      porcentagemResultados.push(porcentagem);
+      custoCpfArray.push(custoMensalCpf);
+      custoCnpjArray.push(custoMensalCnpj);
+      lucroBrutoArray.push(lucroBruto);
+      lucroLiquidoArray.push(lucroLiquido); // Adiciona Lucro Líquido ao array
+      objetivoArray.push(objetivo); // Adiciona o objetivo ao array
+  }
+
+  // Custo Total atualizado com fee
+  custoTotal += feeMensal.reduce((acc, fee) => acc + fee, 0); // Soma todas as fees mensais
+
+  // Lucro Bruto e Lucro Líquido
+  const lucroBrutoTotal = totalFaturamentoAnual - custoTotal; // Lucro Bruto Total
+  const lucroLiquidoTotal = lucroBrutoTotal - (percent * totalFaturamentoAnual); // Lucro Líquido Total
+  const roiPercentual = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) * 100 : 0; // ROI em porcentagem
+  const roiPontuacao = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) : 0; // ROI como pontuação
+
+  // Verificar se o objetivo declarado foi atingido
+  const objetivoAtingido = totalFaturamentoAnual >= objetivo;
+
+  document.getElementById('resultado').innerHTML = `
+      <h3>Resultados:</h3>
+      <p>Total Anual (Faturamento): R$ ${totalFaturamentoAnual.toFixed(2)}</p>
+      <p>Custo Total: R$ ${custoTotal.toFixed(2)}</p>
+      <p>Lucro Bruto: R$ ${lucroBrutoTotal.toFixed(2)}</p>
+      <p>Lucro Líquido: R$ ${lucroLiquidoTotal.toFixed(2)}</p>
+      <p>ROI (Porcentagem): ${roiPercentual.toFixed(2)}%</p>
+      <p>ROI (Pontuação): ${roiPontuacao.toFixed(2)}</p>
+      <p>Objetivo Atingido: ${objetivoAtingido ? "Sim" : "Não"}</p>
+  `;
+
+// Criar o gráfico com Plotly
+const data = [
+    { x: labels, y: faturamentoMensalArray, mode: 'lines+markers', name: 'Faturamento Mensal (R$)', line: { color: 'rgba(0, 128, 0, 1)' } }, // Verde padrão
+    { x: labels, y: feeMensal, mode: 'lines+markers', name: 'Fee Mensal (R$)', line: { color: 'rgba(255, 20, 147, 1)' } }, // Pink padrão
+    { x: labels, y: porcentagemResultados, mode: 'lines+markers', name: 'Porcentagem dos Resultados (R$)', line: { color: 'rgba(255, 165, 0, 1)' } }, // Laranja
+    { x: labels, y: custoCpfArray, mode: 'lines+markers', name: 'Custo CPF Mensal (R$)', line: { color: 'rgba(128, 0, 128, 1)' } }, // Roxo escuro
+    { x: labels, y: custoCnpjArray, mode: 'lines+markers', name: 'Custo CNPJ Mensal (R$)', line: { color: 'rgba(255, 105, 180, 1)' } }, // Rosa forte
+    { x: labels, y: lucroBrutoArray, mode: 'lines+markers', name: 'Lucro Bruto Mensal (R$)', line: { color: 'rgba(0, 153, 204, 1)' } }, // Azul forte e brilhante
+    { x: labels, y: lucroLiquidoArray, mode: 'lines+markers', name: 'Lucro Líquido Mensal (R$)', line: { color: 'rgba(0, 0, 255, 1)' } }, // Azul padrão
+    { x: labels, y: objetivoArray, mode: 'lines', name: 'Objetivo Declarado (R$)', line: { color: 'rgba(0, 0, 0, 1)' } } // Preto - linha simples sem pontos
+];
+
+
+
+
+
+  // Ordenar os dados em ordem decrescente com base no lucro líquido
+  const sortedData = data.sort((a, b) => {
+      const lucroA = a.y.reduce((acc, val) => acc + val, 0);
+      const lucroB = b.y.reduce((acc, val) => acc + val, 0);
+      return lucroB - lucroA; // Ordem decrescente
+  });
+
+  Plotly.newPlot('grafico', sortedData, {
+      title: 'Gráfico de ROI',
+      xaxis: { title: 'Meses' },
+      yaxis: { title: 'Valores (R$)' }
+  });
+
+  // Atualizar a explicação do gráfico
+  document.getElementById('explicacao').innerHTML = `
+      <h3>Explicação do Gráfico:</h3>
+      <p>
+          O gráfico acima ilustra a progressão do faturamento mensal, fee mensal, custos mensais (CPF e CNPJ), lucro bruto e lucro líquido, além do objetivo declarado ao longo do tempo. 
+          Cada linha representa uma métrica diferente, permitindo que você visualize como cada aspecto evolui em relação ao tempo.
+      </p>
+  `;
+}
+
+function salvarCenario() {
+  const nomeProjeto = document.getElementById('nome_projeto').value;
+  const objetivo = parseFloat(document.getElementById('objetivo').value);
+  const tempo = parseFloat(document.getElementById('tempo').value);
+  const percent = parseFloat(document.getElementById('percent').value) / 100;
+  const assinantesCNPJ = parseFloat(document.getElementById('assinantes_cnpj').value);
+  const metaCpfPorCnpj = parseFloat(document.getElementById('meta_cpf_por_cnpj').value);
+  const ticketCpf = parseFloat(document.getElementById('ticket_cpf').value);
+  const ticketCnpj = parseFloat(document.getElementById('ticket_cnpj').value);
+  const custoCpf = parseFloat(document.getElementById('custo_cpf').value);
+  const custoCnpj = parseFloat(document.getElementById('custo_cnpj').value);
+
+  const cenario = {
+      nomeProjeto,
+      objetivo,
+      tempo,
+      fee: feeFixo,
+      percent,
+      assinantesCNPJ,
+      metaCpfPorCnpj,
+      ticketCpf,
+      ticketCnpj,
+      custoCpf,
+      custoCnpj
+  };
+
+  const json = JSON.stringify(cenario, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${nomeProjeto}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function carregarCenario() {
+  document.getElementById('fileInput').click();
+}
+
+function lerArquivo(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+      const cenario = JSON.parse(e.target.result);
+      document.getElementById('nome_projeto').value = cenario.nomeProjeto;
+      document.getElementById('objetivo').value = cenario.objetivo;
+      document.getElementById('tempo').value = cenario.tempo;
+      document.getElementById('percent').value = cenario.percent * 100; // Converter de decimal para percentual
+      document.getElementById('assinantes_cnpj').value = cenario.assinantesCNPJ;
+      document.getElementById('meta_cpf_por_cnpj').value = cenario.metaCpfPorCnpj;
+      document.getElementById('ticket_cpf').value = cenario.ticketCpf;
+      document.getElementById('ticket_cnpj').value = cenario.ticketCnpj;
+      document.getElementById('custo_cpf').value = cenario.custoCpf;
+      document.getElementById('custo_cnpj').value = cenario.custoCnpj;
+      atualizarFee(); // Atualiza o fee se necessário
+      calcularROI(); // Recalcula o ROI após carregar o cenário
+  };
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
