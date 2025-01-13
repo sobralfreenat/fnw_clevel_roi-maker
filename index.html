@@ -105,6 +105,15 @@ h3 {
   <label for="custo_cnpj">Custo por CNPJ (R$) (ROI):</label>
   <input type="number" id="custo_cnpj" placeholder="Ex: 1000" oninput="calcularROI()" />
 
+  <label for="ordemLegenda">Ordem da Legenda:</label>
+  <select id="ordemLegenda" onchange="atualizarGrafico()">
+      <option value="padrao">Padrão</option>
+      <option value="crescente">Crescente (A-Z)</option>
+      <option value="decrescente">Decrescente (Z-A)</option>
+      <option value="grafico_crescente">De acordo com o gráfico (Crescente)</option>
+      <option value="grafico_decrescente">De acordo com o gráfico (Decrescente)</option>
+  </select>
+
   <button onclick="calcularROI()">Calcular ROI</button>
   <button onclick="salvarCenario()">Salvar Cenário</button>
   <button onclick="carregarCenario()">Carregar Cenário</button>
@@ -134,68 +143,85 @@ function atualizarFee() {
   }
 }
 
+let data = []; // Array para armazenar as séries do gráfico
+
 function calcularROI() {
-  const objetivo = parseFloat(document.getElementById('objetivo').value);
-  const tempo = parseFloat(document.getElementById('tempo').value);
-  const percent = parseFloat(document.getElementById('percent').value) / 100;
-  const assinantesCNPJ = parseFloat(document.getElementById('assinantes_cnpj').value);
-  const metaCpfPorCnpj = parseFloat(document.getElementById('meta_cpf_por_cnpj').value);
-  const ticketCpf = parseFloat(document.getElementById('ticket_cpf').value);
-  const ticketCnpj = parseFloat(document.getElementById('ticket_cnpj').value);
-  const custoCpf = parseFloat(document.getElementById('custo_cpf').value);
-  const custoCnpj = parseFloat(document.getElementById('custo_cnpj').value);
+  const objetivo = parseFloat(document.getElementById('objetivo').value) || 0;
+  const tempo = parseFloat(document.getElementById('tempo').value) || 0;
+  const percent = parseFloat(document.getElementById('percent').value) / 100 || 0;
+  const assinantesCNPJ = parseFloat(document.getElementById('assinantes_cnpj').value) || 0;
+  const metaCpfPorCnpj = parseFloat(document.getElementById('meta_cpf_por_cnpj').value) || 0;
+  const ticketCpf = parseFloat(document.getElementById('ticket_cpf').value) || 0;
+  const ticketCnpj = parseFloat(document.getElementById('ticket_cnpj').value) || 0;
+  const custoCpf = parseFloat(document.getElementById('custo_cpf').value) || 0;
+  const custoCnpj = parseFloat(document.getElementById('custo_cnpj').value) || 0;
 
   // Cálculo do faturamento mensal
-  const faturamentoMensal = (assinantesCNPJ * ticketCnpj) + (metaCpfPorCnpj * ticketCpf);
-  const totalFaturamentoAnual = faturamentoMensal * tempo; // Total baseado no tempo estimado
+  const faturamentoMensalCPF = assinantesCNPJ * metaCpfPorCnpj * ticketCpf; // Faturamento CPF
+  const faturamentoMensalCNPJ = assinantesCNPJ * ticketCnpj; // Faturamento CNPJ
+  const faturamentoMensal = faturamentoMensalCPF + faturamentoMensalCNPJ; // Faturamento total mensal
 
-  // Custo Total
-  let custoTotal = (custoCpf * metaCpfPorCnpj * tempo) + (custoCnpj * assinantesCNPJ * tempo);
-
-  // Gerar dados para o gráfico de progressão
+  // Arrays para armazenar os dados mensais
   const labels = [];
   const faturamentoMensalArray = [];
   const feeMensal = [];
   const porcentagemResultados = [];
-  const custoCpfArray = [];
-  const custoCnpjArray = [];
+  const custoCpfArray = []; // Custo acumulado de CPF
+  const custoCnpjArray = []; // Custo acumulado de CNPJ
   const lucroBrutoArray = [];
-  const lucroLiquidoArray = []; // Array para o Lucro Líquido
-  const objetivoArray = []; // Array para o objetivo declarado
+  const lucroLiquidoArray = [];
+  const custoTotalArray = [];
+  const objetivoArray = new Array(tempo).fill(objetivo); // Linha do objetivo declarado
+
+  let custoTotal = 0;
+  let custoAcumuladoCpf = 0; // Custo acumulado de CPF
+  let custoAcumuladoCnpj = 0; // Custo acumulado de CNPJ
+  let mesAtingido = null; // Mês em que o objetivo é atingido
 
   for (let mes = 1; mes <= tempo; mes++) {
       const faturamento = faturamentoMensal * mes; 
-      const totalFee = feeFixo * Math.pow(1 + taxaCrescimentoFee, mes - 1); // Fee cresce mensalmente
-      const porcentagem = (percent * faturamento) || 0; // Evitar NaN
-      const custoMensalCpf = custoCpf * metaCpfPorCnpj; // Custo mensal para CPF
-      const custoMensalCnpj = custoCnpj * assinantesCNPJ; // Custo mensal para CNPJ
-      
-      // Cálculo do Lucro Bruto
-      const lucroBruto = faturamento - (custoMensalCpf + custoMensalCnpj + totalFee); // Lucro Bruto mensal
-      const lucroLiquido = lucroBruto - (percent * faturamento); // Lucro Líquido mensal
+      const totalFee = feeFixo * Math.pow(1 + taxaCrescimentoFee, mes - 1);
+      const porcentagem = (percent * faturamento) || 0;
 
+      // Cálculo dos custos mensais
+      const custoMensalCpf = assinantesCNPJ * metaCpfPorCnpj * custoCpf; // Custo mensal de CPF
+      const custoMensalCnpj = assinantesCNPJ * custoCnpj; // Custo mensal de CNPJ
+
+      // Acumula os custos de CPF e CNPJ
+      custoAcumuladoCpf += custoMensalCpf;
+      custoAcumuladoCnpj += custoMensalCnpj;
+
+      // Cálculo do Lucro Bruto
+      const lucroBruto = faturamento - (custoMensalCpf + custoMensalCnpj + totalFee);
+      const lucroLiquido = lucroBruto - porcentagem;
+
+      // Acumula o custo total
+      custoTotal += (custoMensalCpf + custoMensalCnpj + totalFee);
+
+      // Verifica se o objetivo foi atingido
+      if (faturamento >= objetivo && !mesAtingido) {
+          mesAtingido = mes;
+      }
+
+      // Armazena os resultados nos arrays
       labels.push(`Mês ${mes}`);
       faturamentoMensalArray.push(faturamento);
       feeMensal.push(totalFee);
       porcentagemResultados.push(porcentagem);
-      custoCpfArray.push(custoMensalCpf);
-      custoCnpjArray.push(custoMensalCnpj);
+      custoCpfArray.push(custoAcumuladoCpf); // Custo acumulado de CPF
+      custoCnpjArray.push(custoAcumuladoCnpj); // Custo acumulado de CNPJ
       lucroBrutoArray.push(lucroBruto);
-      lucroLiquidoArray.push(lucroLiquido); // Adiciona Lucro Líquido ao array
-      objetivoArray.push(objetivo); // Adiciona o objetivo ao array
+      lucroLiquidoArray.push(lucroLiquido);
+      custoTotalArray.push(custoTotal);
   }
 
-  // Custo Total atualizado com fee
-  custoTotal += feeMensal.reduce((acc, fee) => acc + fee, 0); // Soma todas as fees mensais
-
-  // Lucro Bruto e Lucro Líquido
-  const lucroBrutoTotal = totalFaturamentoAnual - custoTotal; // Lucro Bruto Total
-  const lucroLiquidoTotal = lucroBrutoTotal - (percent * totalFaturamentoAnual); // Lucro Líquido Total
-  const roiPercentual = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) * 100 : 0; // ROI em porcentagem
-  const roiPontuacao = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) : 0; // ROI como pontuação
-
-  // Verificar se o objetivo declarado foi atingido
+  const totalFaturamentoAnual = faturamentoMensal * tempo;
+  const lucroBrutoTotal = totalFaturamentoAnual - custoTotal;
+  const lucroLiquidoTotal = lucroBrutoTotal - (percent * totalFaturamentoAnual);
+  const roiPercentual = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) * 100 : 0;
+  const roiPontuacao = (custoTotal !== 0) ? (lucroLiquidoTotal / custoTotal) : 0;
   const objetivoAtingido = totalFaturamentoAnual >= objetivo;
+  const margemLucroLiquido = (lucroLiquidoTotal / totalFaturamentoAnual) * 100;
 
   document.getElementById('resultado').innerHTML = `
       <h3>Resultados:</h3>
@@ -203,48 +229,55 @@ function calcularROI() {
       <p>Custo Total: R$ ${custoTotal.toFixed(2)}</p>
       <p>Lucro Bruto: R$ ${lucroBrutoTotal.toFixed(2)}</p>
       <p>Lucro Líquido: R$ ${lucroLiquidoTotal.toFixed(2)}</p>
+      <p>Margem de Lucro Líquido: ${margemLucroLiquido.toFixed(2)}%</p>
       <p>ROI (Porcentagem): ${roiPercentual.toFixed(2)}%</p>
       <p>ROI (Pontuação): ${roiPontuacao.toFixed(2)}</p>
       <p>Objetivo Atingido: ${objetivoAtingido ? "Sim" : "Não"}</p>
+      <p>Mês em que o objetivo será atingido: ${mesAtingido ? `Mês ${mesAtingido}` : "Não atingido"}</p>
   `;
 
-// Criar o gráfico com Plotly
-const data = [
-    { x: labels, y: faturamentoMensalArray, mode: 'lines+markers', name: 'Faturamento Mensal (R$)', line: { color: 'rgba(0, 128, 0, 1)' } }, // Verde padrão
-    { x: labels, y: feeMensal, mode: 'lines+markers', name: 'Fee Mensal (R$)', line: { color: 'rgba(255, 20, 147, 1)' } }, // Pink padrão
-    { x: labels, y: porcentagemResultados, mode: 'lines+markers', name: 'Porcentagem dos Resultados (R$)', line: { color: 'rgba(255, 165, 0, 1)' } }, // Laranja
-    { x: labels, y: custoCpfArray, mode: 'lines+markers', name: 'Custo CPF Mensal (R$)', line: { color: 'rgba(128, 0, 128, 1)' } }, // Roxo escuro
-    { x: labels, y: custoCnpjArray, mode: 'lines+markers', name: 'Custo CNPJ Mensal (R$)', line: { color: 'rgba(255, 105, 180, 1)' } }, // Rosa forte
-    { x: labels, y: lucroBrutoArray, mode: 'lines+markers', name: 'Lucro Bruto Mensal (R$)', line: { color: 'rgba(0, 153, 204, 1)' } }, // Azul forte e brilhante
-    { x: labels, y: lucroLiquidoArray, mode: 'lines+markers', name: 'Lucro Líquido Mensal (R$)', line: { color: 'rgba(0, 0, 255, 1)' } }, // Azul padrão
-    { x: labels, y: objetivoArray, mode: 'lines', name: 'Objetivo Declarado (R$)', line: { color: 'rgba(0, 0, 0, 1)' } } // Preto - linha simples sem pontos
-];
+  // Define as séries do gráfico
+  data = [
+      { x: labels, y: faturamentoMensalArray, mode: 'lines+markers', name: 'Faturamento Mensal (R$)', line: { color: 'rgba(0, 128, 0, 1)' } },
+      { x: labels, y: feeMensal, mode: 'lines+markers', name: 'Fee Mensal (R$)', line: { color: 'rgba(255, 20, 147, 1)' } },
+      { x: labels, y: porcentagemResultados, mode: 'lines+markers', name: 'Porcentagem dos Resultados (R$)', line: { color: 'rgba(255, 165, 0, 1)' } },
+      { x: labels, y: custoCpfArray, mode: 'lines+markers', name: 'Custo Acumulado CPF (R$)', line: { color: 'rgba(128, 0, 128, 1)' } },
+      { x: labels, y: custoCnpjArray, mode: 'lines+markers', name: 'Custo Acumulado CNPJ (R$)', line: { color: 'rgba(255, 105, 180, 1)' } },
+      { x: labels, y: lucroBrutoArray, mode: 'lines+markers', name: 'Lucro Bruto Mensal (R$)', line: { color: 'rgba(0, 153, 204, 1)' } },
+      { x: labels, y: lucroLiquidoArray, mode: 'lines+markers', name: 'Lucro Líquido Mensal (R$)', line: { color: 'rgba(0, 0, 255, 1)' } },
+      { x: labels, y: custoTotalArray, mode: 'lines', name: 'Custo Total (R$)', line: { color: 'rgba(255, 0, 0, 1)' } },
+      { x: labels, y: objetivoArray, mode: 'lines', name: 'Objetivo Declarado (R$)', line: { color: 'rgba(0, 0, 0, 1)', dash: 'solid' } } // Linha do objetivo
+  ];
 
+  // Atualiza o gráfico com a ordem padrão
+  atualizarGrafico();
+}
 
+function atualizarGrafico() {
+  const ordem = document.getElementById('ordemLegenda').value;
 
+  // Define a ordem das séries com base na seleção
+  let seriesOrdenadas;
+  if (ordem === "crescente") {
+      seriesOrdenadas = data.slice().sort((a, b) => a.name.localeCompare(b.name));
+  } else if (ordem === "decrescente") {
+      seriesOrdenadas = data.slice().sort((a, b) => b.name.localeCompare(a.name));
+  } else if (ordem === "grafico_crescente") {
+      // Ordena as séries pelo último valor no gráfico (crescente)
+      seriesOrdenadas = data.slice().sort((a, b) => a.y[a.y.length - 1] - b.y[b.y.length - 1]);
+  } else if (ordem === "grafico_decrescente") {
+      // Ordena as séries pelo último valor no gráfico (decrescente)
+      seriesOrdenadas = data.slice().sort((a, b) => b.y[b.y.length - 1] - a.y[a.y.length - 1]);
+  } else {
+      seriesOrdenadas = data; // Ordem padrão
+  }
 
-
-  // Ordenar os dados em ordem decrescente com base no lucro líquido
-  const sortedData = data.sort((a, b) => {
-      const lucroA = a.y.reduce((acc, val) => acc + val, 0);
-      const lucroB = b.y.reduce((acc, val) => acc + val, 0);
-      return lucroB - lucroA; // Ordem decrescente
-  });
-
-  Plotly.newPlot('grafico', sortedData, {
+  // Reconstruir o gráfico com a nova ordem
+  Plotly.newPlot('grafico', seriesOrdenadas, {
       title: 'Gráfico de ROI',
       xaxis: { title: 'Meses' },
       yaxis: { title: 'Valores (R$)' }
   });
-
-  // Atualizar a explicação do gráfico
-  document.getElementById('explicacao').innerHTML = `
-      <h3>Explicação do Gráfico:</h3>
-      <p>
-          O gráfico acima ilustra a progressão do faturamento mensal, fee mensal, custos mensais (CPF e CNPJ), lucro bruto e lucro líquido, além do objetivo declarado ao longo do tempo. 
-          Cada linha representa uma métrica diferente, permitindo que você visualize como cada aspecto evolui em relação ao tempo.
-      </p>
-  `;
 }
 
 function salvarCenario() {
